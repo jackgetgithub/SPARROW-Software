@@ -2,11 +2,8 @@
 # Please follow the comments in the send.py script for what should be changed accordingly for image transmission
 
 import cv2
-import numpy as np
-import serial
 import time
 from pymavlink import mavutil
-import threading
 from ultralytics import YOLO
 
 # 1 for RGB cam and 2 for FLIR
