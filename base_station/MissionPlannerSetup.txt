@@ -1,0 +1,7 @@
+Please go to this website to install ArduPilot Mission Planner: https://ardupilot.org/planner/docs/mission-planner-installation.html
+
+For this project, we installed it on Linux, hence we installed the latest version of MONO following this link: https://www.mono-project.com/download/stable/#download-lin
+Once Mission Planner is downloaded from the link above, unzip it and go into the directory where you would run:
+mono MissionPlanner.exe
+
+Note: For this project, we set up the connection on Mission Planner to be the default UDP port, hence listening to localhost (127.0.0.1) at port 14550
