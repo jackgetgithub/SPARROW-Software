@@ -9,9 +9,13 @@ import cv2
 import numpy as np
 from pymavlink import mavutil
 
+# NOTE: There are 2 threads running alongside the main for listening for communication data, one for serial data from PCB and another for mavlink data
+
 # --- Config ---
+# This sets up the mavlink connection to listen for the port for image metadata
 connection = mavutil.mavlink_connection('udpin:127.0.0.1:14552')
-#ser = serial.Serial(None)
+# This serial port listens for data from the PCB, specifically Base station GPS coordinates and battery life
+ser = serial.Serial(None)
 received_chunks = {}
 expected_packets = None
 img_type = 0  # 0 = RGB, 1 = Thermal
@@ -71,7 +75,7 @@ battery_canvas.pack(side="right", padx=10)
 battery_canvas.create_rectangle(5, 5, 65, 25, outline="black", width=2)  # main battery body
 battery_canvas.create_rectangle(65, 10, 70, 20, fill="black")            # battery cap
 
-# Draw initial tiers (example with 3 out of 5 filled)
+# Draw initial tiers
 battery_tiers = []
 for i in range(5):
     x0 = 7 + i * 11
@@ -79,6 +83,53 @@ for i in range(5):
     tier = battery_canvas.create_rectangle(x0, 7, x1, 23, fill="gray", outline="")  # empty initially
     battery_tiers.append(tier)
 
+def update_battery(life):
+    battery_tiers.clear()
+    if life > 80:
+        for i in range(5):
+            x0 = 7 + i * 11
+            x1 = x0 + 9
+            tier = battery_canvas.create_rectangle(x0, 7, x1, 23, fill="green", outline="")
+            battery_tiers.append(tier)
+    elif life > 60:
+        for i in range(4):
+            x0 = 7 + i * 11
+            x1 = x0 + 9
+            tier = battery_canvas.create_rectangle(x0, 7, x1, 23, fill="green", outline="")
+            battery_tiers.append(tier)
+        tier5 = battery_canvas.create_rectangle(51, 7, 60, 23, fill="gray", outline="")
+        battery_tiers.append(tier5)
+    elif life > 40:
+        for i in range(3):
+            x0 = 7 + i * 11
+            x1 = x0 + 9
+            tier = battery_canvas.create_rectangle(x0, 7, x1, 23, fill="yellow", outline="")
+            battery_tiers.append(tier)
+        tier4 = battery_canvas.create_rectangle(40, 7, 49, 23, fill="gray", outline="")
+        battery_tiers.append(tier4)
+        tier5 = battery_canvas.create_rectangle(51, 7, 60, 23, fill="gray", outline="")
+        battery_tiers.append(tier5)
+    elif life > 20:
+        for i in range(2):
+            x0 = 7 + i * 11
+            x1 = x0 + 9
+            tier = battery_canvas.create_rectangle(x0, 7, x1, 23, fill="yellow", outline="")
+            battery_tiers.append(tier)
+        tier3 = battery_canvas.create_rectangle(29, 7, 38, 23, fill="gray", outline="")
+        battery_tiers.append(tier3)
+        tier4 = battery_canvas.create_rectangle(40, 7, 49, 23, fill="gray", outline="")
+        battery_tiers.append(tier4)
+        tier5 = battery_canvas.create_rectangle(51, 7, 60, 23, fill="gray", outline="")
+        battery_tiers.append(tier5)
+    else:
+        tier = battery_canvas.create_rectangle(7, 7, 16, 23, fill="red", outline="")
+        battery_tiers.append(tier)
+        for i in range(1, 5):
+            x0 = 7 + i * 11
+            x1 = x0 + 9
+            tier = battery_canvas.create_rectangle(x0, 7, x1, 23, fill="gray", outline="")
+            battery_tiers.append(tier)
+            
 #Toggle Buttons
 def show_rgb_only():
     for widget in image_frame.winfo_children():
@@ -177,7 +228,7 @@ def serial_thread():
             if "Battery" in received_data:
                 part = received_data.split()
                 life = float(part[1])
-                
+                update_battery(life)
                 
                 
         except Exception as e:
@@ -220,19 +271,11 @@ def mavlink_thread():
             lon = msg.lon / 1e7
             gps_label.config(text=f"GPS: {lat:.6f}, {lon:.6f}")
             log_message(f"[GPS] Drone: {lat:.6f}, {lon:.6f}")
-
-        elif msg.get_type() == "DATA_TRANSMISSON_HANDSHAKE":
-            expected_packets = msg.packets
-            img_type = msg.height
-            received_chunks = {}
-            info = f"[HANDSHAKE] Packets: {expected_packets}, Type: {t}"
-            print(info)
-            log_message(info)
             
 
 # --- Start Thread ---
 threading.Thread(target=mavlink_thread, daemon=True).start()
-#threading.Thread(target=serial_thread, daemon=True).start()
+threading.Thread(target=serial_thread, daemon=True).start()
 # --- GUI Loop ---
 show_both()
 root.mainloop()
