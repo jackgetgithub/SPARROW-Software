@@ -13,8 +13,11 @@ pip install pillow
 numpy:
 pip install numpy
 
+pymavlink on python:
+pip install pymavlink
+
 All in one line:
-pip install pillow opencv-python numpy pymavlink
+pip install pillow opencv-python pyserial numpy pymavlink
 
 ############
 
