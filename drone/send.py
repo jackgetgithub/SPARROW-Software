@@ -3,11 +3,8 @@
 # note in image handshake, the img_height and img_width are not required in our case, hence it is being used to flag if the image is thermal or regular camera
 
 import cv2
-import numpy as np
-import serial
 import time
 from pymavlink import mavutil
-import threading
 
 # 1 for RGB cam and 2 for FLIR
 # NOTE: Just use -1 if you have one camera and it will try to locate it on the Nano upon execution of code
