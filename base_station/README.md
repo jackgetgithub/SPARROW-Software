@@ -7,17 +7,11 @@ pip install opencv-python
 Serial on python:
 pip install pyserial
 
-PIL:
-pip install pillow
-
-numpy:
-pip install numpy
-
 pymavlink on python:
 pip install pymavlink
 
 All in one line:
-pip install pillow opencv-python pyserial numpy pymavlink
+pip install opencv-python pyserial pymavlink
 
 ############
 
