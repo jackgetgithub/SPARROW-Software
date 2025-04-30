@@ -8,8 +8,10 @@ from pymavlink import mavutil
 
 # 1 for RGB cam and 2 for FLIR
 # NOTE: Just use -1 if you have one camera and it will try to locate it on the Nano upon execution of code
+# NOTE: IGNORE cycle if only 1 camera
 camera = 0
 camera2 = 1
+cycle = 0
 
 udp_port ='udpout:127.0.0.1:14550'
 connection = mavutil.mavlink_connection(udp_port, source_system=1)
@@ -64,13 +66,11 @@ def send_image(image, cycle):
     time.sleep(0.6)
     
 # Just use cap = cv2.VideoCapture(-1) if only camera
-# NOTE: IGNORE cycle if only 1 camera
 cap = cv2.VideoCapture(camera)  # Open camera
 cap2 = cv2.VideoCapture(camera2) #Open the other camera
-cycle = 0
 
 if not cap.isOpened():
-    print("Error: Could not open webcam.")
+    print("Error: Could not open camera.")
     exit()
     
 while True:
@@ -84,18 +84,7 @@ while True:
             cycle = 0 
             
         # Resize the frame to the desired dimensions (e.g., 640x480)
-        resized_frame = cv2.resize(frame, (640, 480))
-
-        # Perform inference on the resized frame
-        results = model(resized_frame, device='cuda')  # Ensure 'cuda' is used for GPU inference
-
-        # Visualize the results on the frame
-        annotated_frame = results[0].plot()
-
-        # Display the resulting frame
-        #cv2.imshow('YOLOv8 Inference', annotated_frame)
-
-        resized_frame = cv2.resize(annotated_frame, (160, 128))
+        resized_frame = cv2.resize(resized_frame, (160, 128))
         send_image(resized_frame, cycle)
         time.sleep(5)  # Adjust based on transmission speed
         

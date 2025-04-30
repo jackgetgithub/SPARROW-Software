@@ -1,6 +1,7 @@
 # NOTE: This is the exact same as the send.py except now we are adding the Human detection model which will start its set up before running the image transmission
 # Please follow the comments in the send.py script for what should be changed accordingly for image transmission
 
+
 import cv2
 import time
 from pymavlink import mavutil
@@ -9,6 +10,9 @@ from ultralytics import YOLO
 # 1 for RGB cam and 2 for FLIR
 camera = 0
 camera2 = 1
+cycle = 0
+
+model_name = 'yolov8n.engine'
 
 udp_port ='udpout:127.0.0.1:14550'
 connection = mavutil.mavlink_connection(udp_port, source_system=1)
@@ -63,17 +67,21 @@ def send_image(image, cycle):
     
 
 # Load the YOLOv8n model
-model = YOLO('yolov8n.engine')
+model = YOLO(model_name)
 cap = cv2.VideoCapture(camera)  # Open camera
 cap2 = cv2.VideoCapture(camera2) #Open the other camera
-cycle = 0
 
 if not cap.isOpened():
-    print("Error: Could not open webcam.")
+    print("Error: Could not open camera.")
+    exit()
+
+if not cap2.isOpened():
+    print("Error: Could not open FLIR.")
     exit()
     
 while True:
     try:
+        # IF ONLY one camera on drone with NANO, remove the cycle and always do: ret, frame = cap.read()
         if cycle == 0:
             ret, frame = cap.read()
             cycle = 1
@@ -81,7 +89,7 @@ while True:
             ret, frame = cap2.read()
             cycle = 0 
             
-        # Resize the frame to the desired dimensions (e.g., 640x480)
+        # Resize the frame to the desired dimensions 640x480 for YOLOv8 for faster inference
         resized_frame = cv2.resize(frame, (640, 480))
 
         # Perform inference on the resized frame
