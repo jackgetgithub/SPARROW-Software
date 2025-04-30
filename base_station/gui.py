@@ -4,9 +4,7 @@ from PIL import Image, ImageTk
 import threading
 import tempfile
 import os
-import time
 import cv2
-import numpy as np
 import serial
 from pymavlink import mavutil
 
