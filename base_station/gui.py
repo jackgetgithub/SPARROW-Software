@@ -7,6 +7,7 @@ import os
 import time
 import cv2
 import numpy as np
+import serial
 from pymavlink import mavutil
 
 # NOTE: There are 2 threads running alongside the main for listening for communication data, one for serial data from PCB and another for mavlink data
