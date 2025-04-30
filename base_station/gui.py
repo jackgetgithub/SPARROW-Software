@@ -15,10 +15,13 @@ from pymavlink import mavutil
 # This sets up the mavlink connection to listen for the port for image metadata
 connection = mavutil.mavlink_connection('udpin:127.0.0.1:14552')
 # This serial port listens for data from the PCB, specifically Base station GPS coordinates and battery life
-ser = serial.Serial(None)
-received_chunks = {}
-expected_packets = None
+ser = serial.Serial('/dev/ttyUSB0' , 115200)
+rgb_received_chunks = {}
+thermal_received_chunks = {}
+rgb_expected_packets = None
+thermal_expected_packets = None
 img_type = 0  # 0 = RGB, 1 = Thermal
+drone_selected = 1 # 1 = A, 3 = B, 2 = C
 
 # --- GUI Setup ---
 print("[GUI] Starting GUI...")
@@ -155,6 +158,26 @@ tk.Button(button_frame, text="RGB Only", command=show_rgb_only, font=default_fon
 tk.Button(button_frame, text="Thermal Only", command=show_thermal_only,font=default_font, bg="white", fg="black").pack(side="left", padx=5)
 tk.Button(button_frame, text="Show Both", command=show_both, font=default_font, bg="white", fg="black").pack(side="left", padx=5)
 
+# Dropdown Menu
+def on_dropdown_change(event):
+    global drone_selected
+    selection = dropdown.get()
+    log_message(f"[Dropdown] Selected option: {selection}")
+    # Add any specific behavior for each choice here
+    if selection == "Drone A":
+        drone_selected = 1
+    elif selection == "Drone B":
+        drone_selected = 3
+    elif selection == "Drone C":
+        drone_selected = 2
+
+dropdown_values = ["Drone A", "Drone B", "Drone C"]
+dropdown = ttk.Combobox(button_frame, values=dropdown_values, font=default_font, width=12)
+dropdown.set("Select Drone")  # default text
+dropdown.bind("<<ComboboxSelected>>", on_dropdown_change)
+dropdown.pack(side="left", padx=5)
+
+
 #Log panel
 def log_message(msg):
     def _log():
@@ -181,16 +204,10 @@ def update_image_on_label(label, img):
     label.config(image=tk_img, width=new_width, height=new_height)
 
 # --- Image Decoder ---
-def process_image():
-    global img_type, received_chunks, expected_packets
+def process_image(img_type, rgb_received_chunks):
     try:
-        sorted_data = b''.join(received_chunks[k] for k in sorted(received_chunks.keys()))
-        received_chunks = {}
-        #np_arr = np.frombuffer(sorted_data, np.uint8)
-        #img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-        
-        # WORKAROUND: Use NamedTemporaryFile to avoid disk I/O bottlenecks
-        # This uses memory mapping when possible, which is much faster than normal file I/O
+        sorted_data = b''.join(rgb_received_chunks[k] for k in sorted(rgb_received_chunks.keys()))
+        rgb_received_chunks = {}
         with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as temp_file:
             temp_name = temp_file.name
             temp_file.write(sorted_data)
@@ -205,7 +222,7 @@ def process_image():
             print(f"Error reading image: {e}")
         finally:
             # Clean up the temporary file
-            received_chunks = {}
+            rgb_received_chunks = {}
             print("Cleaned up chunks array")
             try:
                 os.unlink(temp_name)
@@ -213,7 +230,6 @@ def process_image():
                 pass
     except Exception as e1:
         print(f"Error in processing images: {e1}")
-
 
 def serial_thread():
     global base_gps_label
@@ -236,41 +252,77 @@ def serial_thread():
             
 # --- MAVLink Thread ---
 def mavlink_thread():
-    global expected_packets, img_type, received_chunks
+    global rgb_expected_packets, rgb_received_chunks, thermal_expected_packets, thermal_received_chunks
     t = ""
+    messages = ["DATA_TRANSMISSION_HANDSHAKE", "ENCAPSULATED_DATA", "GLOBAL_POSITION_INT", "HEARTBEAT"]
     while True:
-        msg = connection.recv_match(blocking=False)
+        msg = connection.recv_match(type=messages, blocking=False)
         if not msg:
             continue
-
+        print(msg.get_type())
+        sys_id = msg.get_srcSystem()
+        if sys_id == 1:
+            drone = "A"
+        elif sys_id == 3:
+            drone = "B"
+        elif sys_id == 2:
+            drone = "C"
         if msg.get_type() == 'DATA_TRANSMISSION_HANDSHAKE':
-            expected_packets = msg.packets
             img_type = msg.height
-            t = "Regular Image" if msg.height == 0 else "Thermal Image" # img_height used to tag image type
-            received_chunks = {}
-            info = f"[HANDSHAKE] Expecting {expected_packets} packets. Type: {t}"
+            t = "Regular Image" if msg.height != 1 else "Thermal Image" # img_height used to tag image type
+            if img_type == 0:
+                rgb_expected_packets = msg.packets
+                rgb_received_chunks.clear()
+                info = f"[HANDSHAKE] Expecting {rgb_expected_packets} packets. Type: {t}"
+            elif img_type == 1:
+                thermal_expected_packets = msg.packets
+                thermal_received_chunks.clear()
+                info = f"[HANDSHAKE] Expecting {thermal_expected_packets} packets. Type: {t}"
             print(info)
             log_message(info)
 
         elif msg.get_type() == 'ENCAPSULATED_DATA':
-            print(f"got chunky {msg.seqnr}")
-            if msg.seqnr in received_chunks:
-                continue
-            received_chunks[msg.seqnr] = bytes(msg.data)
-            if len(received_chunks) == expected_packets:
-                info = f"[IMAGE] Received complete image of type {t}"
-                print(info)
-                log_message(info)
-                process_image()
+            if sys_id == 1:
+                print(f"Got chunk {msg.seqnr} from Regular Camera")
+                #if msg.seqnr in rgb_received_chunks:
+                    #continue
+                rgb_received_chunks[msg.seqnr] = bytes(msg.data)
+                if len(rgb_received_chunks) == rgb_expected_packets:
+                    rgb_expected_packets = 0
+                    info = f"[IMAGE] Received complete image of type Regular"
+                    print(info)
+                    log_message(info)
+                    process_image(0, rgb_received_chunks)
+            elif sys_id == 3:
+                print(f"Got chunk {msg.seqnr} from Thermal Camera")
+                #if msg.seqnr in thermal_received_chunks:
+                    #continue
+                thermal_received_chunks[msg.seqnr] = bytes(msg.data)
+                if len(thermal_received_chunks) == thermal_expected_packets:
+                    thermal_expected_packets = 0
+                    info = f"[IMAGE] Received complete image of type Thermal"
+                    print(info)
+                    log_message(info)
+                    process_image(1, thermal_received_chunks)
 
         elif msg.get_type() == 'HEARTBEAT':
-            log_message("[HEARTBEAT] Received from drone.")
+            log_message(f"[HEARTBEAT] Received from drone {drone}.")
 
         elif msg.get_type() == 'GLOBAL_POSITION_INT':
+            if sys_id != drone_selected:
+                continue
+
+            if drone_selected == 1:
+                gps_drone = "A"
+            elif drone_selected == 3:
+                gps_drone = "B"
+            elif drone_selected == 2:
+                gps_drone = "C"
+
             lat = msg.lat / 1e7
             lon = msg.lon / 1e7
-            gps_label.config(text=f"GPS: {lat:.6f}, {lon:.6f}")
-            log_message(f"[GPS] Drone: {lat:.6f}, {lon:.6f}")
+            gps_label.config(text=f"Drone {gps_drone} GPS: {lat:.6f}, {lon:.6f}")
+            log_message(f"[GPS] Drone {gps_drone}: {lat:.6f}, {lon:.6f}")
             
 
 # --- Start Thread ---
